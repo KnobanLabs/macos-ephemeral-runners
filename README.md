@@ -100,9 +100,9 @@ shrink it, and both images are larger than that already, so disks stay as
 they are. Clones are copy-on-write, so a large disk costs the Mac only what a
 job writes.
 
-Matching covers counts, not speed: a vCPU here is one of your Mac's cores,
-which may be faster or slower than the M1 cores (macOS) or the server cores
-(Linux) GitHub uses. A job whose timing depends on CPU speed can still pass
+Matching covers counts, not speed: a vCPU here runs on your Mac's cores,
+which other VMs share (see [Capacity](#capacity)) and which may be faster or
+slower than the M1 cores (macOS) or the server cores (Linux) GitHub uses. A job whose timing depends on CPU speed can still pass
 on one and fail on the other. Set `cpu` and `memory_mb` per pool to size VMs
 differently.
 
