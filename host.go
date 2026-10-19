@@ -12,8 +12,8 @@ const maxSlots = 250
 // Host hands out this Mac's capacity to VMs from every pool: shared memory
 // and vCPU budgets, the macOS guest cap, and network slots.
 //
-// Memory is granted in arrival order so a large macOS request is not starved
-// by a stream of small Linux ones. A request blocked only by the macOS cap
+// Memory is granted in arrival order so a large request is not starved by a
+// stream of smaller ones. A request blocked only by the macOS cap
 // does not hold up anyone else.
 type Host struct {
 	mu        sync.Mutex

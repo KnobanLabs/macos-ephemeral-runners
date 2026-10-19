@@ -60,8 +60,8 @@ flowchart TB
   over from a crash or power loss are deleted on the next start.
 - **Capacity:** every pool of every deployment draws from one memory budget
   and one vCPU budget, both derived from the Mac's hardware unless set. Grants
-  are first come, first served across all of them, so a big macOS VM isn't
-  starved by small Linux ones and an idle org's share goes to a busy one.
+  are first come, first served across all of them, so a large VM isn't
+  starved by smaller ones and an idle org's share goes to a busy one.
   macOS guests are capped at 2 per Mac, Apple's limit. Each slot has a fixed
   MAC address so VM churn can't exhaust the Mac's DHCP leases.
 - **Sleep:** the Mac may sleep. VMs pause with it, and the controller
@@ -83,6 +83,28 @@ add `run_args = ["--rosetta", "rosetta"]` to the pool.
 
 **Private repos only.** Don't let public repositories use these runners; see
 the [security model](#security-model).
+
+## Sizing
+
+The example pools give each VM the vCPUs and memory of GitHub's
+[standard hosted runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+for a private repository, so a job that fits one fits the other:
+
+| Pool | Like | vCPU | Memory | Disk |
+|---|---|---|---|---|
+| macOS | `macos-latest` (arm64) | 3 | 7 GB | the image's, 140 GB |
+| Ubuntu | `ubuntu-24.04-arm` | 2 | 8 GB | 80 GB (`disk_gb`) |
+
+GitHub lists 14 GB of disk for both. Tart can grow an image's disk but not
+shrink it, and both images are larger than that already, so disks stay as
+they are. Clones are copy-on-write, so a large disk costs the Mac only what a
+job writes.
+
+Matching covers counts, not speed: a vCPU here runs on your Mac's cores,
+which other VMs share (see [Capacity](#capacity)) and which may be faster or
+slower than the M1 cores (macOS) or the server cores (Linux) GitHub uses. A job whose timing depends on CPU speed can still pass
+on one and fail on the other. Set `cpu` and `memory_mb` per pool to size VMs
+differently.
 
 ## What lives where
 
@@ -112,7 +134,7 @@ afterwards, so workflows don't change when the Mac or the maintainer does.
 - **Disk:** about 93 GB for the default images, plus room for running jobs.
   Clones are copy-on-write, so each job costs only what it writes. 250 GB free
   is comfortable. Deployments that use the same images share them.
-- **RAM:** 8 GB per macOS job and 4 GB per Ubuntu job, plus 8 GB for the host.
+- **RAM:** 7 GB per macOS job and 8 GB per Ubuntu job, plus 8 GB for the host.
   24 GB is a practical minimum; see [Capacity](#capacity).
 - **Tart 2.29.0 or later.** VMs start with `--no-keyboard` and `--no-pointer`,
   which older versions lack.
@@ -345,15 +367,15 @@ Left unset, the budgets come from the Mac running the controller:
 
 To override either, or the macOS cap, copy `host.example.toml` to
 `~/.config/ephemeral-runners/host.toml` and edit it. `ephemeral-runners check`
-prints the budget in use. With the default pools (macOS 4 vCPU / 8 GB, Ubuntu
-4 vCPU / 4 GB), across all deployments:
+prints the budget in use. With the example pools (macOS 3 vCPU / 7 GB, Ubuntu
+2 vCPU / 8 GB), across all deployments:
 
 | Mac | Budget | Fits at once |
 |---|---|---|
-| 24 GB, 8 cores | 16 GB, 16 vCPU | 2 macOS, or 1 macOS + 2 Ubuntu, or 4 Ubuntu |
-| 36 GB, 14 cores | 28 GB, 28 vCPU | 2 macOS + 3 Ubuntu, or 7 Ubuntu |
-| 64 GB, 16 cores | 56 GB, 32 vCPU | 2 macOS + 6 Ubuntu (CPU-bound), or 8 Ubuntu |
-| 128 GB, 24 cores | 120 GB, 48 vCPU | 2 macOS + 10 Ubuntu, or 12 Ubuntu |
+| 24 GB, 8 cores | 16 GB, 16 vCPU | 2 macOS, or 1 macOS + 1 Ubuntu, or 2 Ubuntu |
+| 36 GB, 14 cores | 28 GB, 28 vCPU | 2 macOS + 1 Ubuntu, or 1 macOS + 2 Ubuntu, or 3 Ubuntu |
+| 64 GB, 16 cores | 56 GB, 32 vCPU | 2 macOS + 5 Ubuntu, or 7 Ubuntu |
+| 128 GB, 24 cores | 120 GB, 48 vCPU | 2 macOS + 13 Ubuntu, or 15 Ubuntu |
 
 A pool's `max_runners` is an upper bound on top of the budgets. Jobs beyond
 what fits wait in GitHub's queue.
