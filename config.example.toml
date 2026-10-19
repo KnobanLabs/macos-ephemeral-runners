@@ -37,13 +37,17 @@ private_key_path = "~/.config/ephemeral-runners/keys/YOUR-DEPLOYMENT-NAME.pem"
 # <org>-ubuntu-x64 alongside without a clash. Two controllers can't serve
 # the same pool name in the same org. Don't use GitHub-hosted labels such as
 # macos-latest or ubuntu-latest.
+#
+# cpu and memory_mb match GitHub's standard hosted runners for private repos,
+# so a job sized for one fits the other (see "Sizing" in the README).
 
 [[pool]]
 name = "tart-macos-arm64"
 os = "macos"
 image = "ghcr.io/cirruslabs/macos-tahoe-xcode:latest"
-cpu = 4
-memory_mb = 8192
+# Hosted macOS arm64 (macos-latest): 3 vCPU (M1), 7 GB.
+cpu = 3
+memory_mb = 7168
 max_runners = 2
 # Booted VMs kept waiting for jobs. Skips the ~30 s macOS boot, but each
 # one holds its memory and CPU while idle.
@@ -60,8 +64,9 @@ min_idle = 0
 name = "tart-ubuntu-arm64"
 os = "linux"
 image = "ghcr.io/cirruslabs/ubuntu-runner-arm64:24.04"
-cpu = 4
-memory_mb = 4096
+# Hosted Linux arm64 (ubuntu-24.04-arm): 2 vCPU, 8 GB.
+cpu = 2
+memory_mb = 8192
 disk_gb = 80
 # An upper bound; the host budget usually limits concurrency first.
 max_runners = 16
