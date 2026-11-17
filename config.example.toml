@@ -59,6 +59,14 @@ min_idle = 0
 # network_allow = ["192.168.1.50/32"]
 # DNS servers for isolated macOS VMs (default: Cloudflare and Google).
 # dns = ["1.1.1.1", "8.8.8.8"]
+# Softnet rules, one per entry, passed to Tart as written (Softnet 0.25.0 or
+# later for protocol and port rules). An allow that names a port opens it on
+# private ranges too; see "Tighter rules" in the README. This keeps only DNS to
+# the two resolvers in the dns line above, uncommented; left unset, dns also
+# holds 1.0.0.1 and 8.8.4.4, which these rules block. Linux VMs use the
+# gateway for DNS, so these lines don't fit a Linux pool.
+# softnet_block = ["@host", "out proto udp", "out proto icmp"]
+# softnet_allow = ["out proto udp 1.1.1.1/32 port 53", "out proto udp 8.8.8.8/32 port 53"]
 
 [[pool]]
 name = "tart-ubuntu-arm64"

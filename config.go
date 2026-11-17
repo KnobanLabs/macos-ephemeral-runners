@@ -121,6 +121,13 @@ type Pool struct {
 	// on Softnet can't reach the gateway, which DHCP names as their DNS
 	// server, so they get public resolvers instead (defaultGuestDNS).
 	DNS []string `toml:"dns"`
+	// SoftnetAllow and SoftnetBlock are Softnet rules, one per entry, passed
+	// to Tart as written: anything Softnet accepts, such as
+	// "out proto udp 1.1.1.1/32 port 53". Softnet ranks a rule that names a
+	// port above any that doesn't, then the longest prefix, so an allow rule
+	// with a port opens that port on private ranges too.
+	SoftnetAllow []string `toml:"softnet_allow"`
+	SoftnetBlock []string `toml:"softnet_block"`
 	// RunArgs are extra arguments for `tart run`, e.g. ["--rosetta", "rosetta"].
 	RunArgs []string `toml:"run_args"`
 }
@@ -137,8 +144,11 @@ func (p Pool) tartRunArgs() []string {
 	var args []string
 	if p.isolated() {
 		args = append(args, "--net-softnet")
-		if len(p.NetworkAllow) > 0 {
-			args = append(args, "--net-softnet-allow="+strings.Join(p.NetworkAllow, ","))
+		if allow := slices.Concat(p.NetworkAllow, p.SoftnetAllow); len(allow) > 0 {
+			args = append(args, "--net-softnet-allow="+strings.Join(allow, ","))
+		}
+		if len(p.SoftnetBlock) > 0 {
+			args = append(args, "--net-softnet-block="+strings.Join(p.SoftnetBlock, ","))
 		}
 	}
 	return append(args, p.RunArgs...)
@@ -175,8 +185,14 @@ func LoadConfig(dir string) (*Config, error) {
 		},
 	}
 	hostPath := filepath.Join(dir, "host.toml")
-	if _, err := toml.DecodeFile(hostPath, &cfg.Host); err != nil && !errors.Is(err, os.ErrNotExist) {
+	md, err := toml.DecodeFile(hostPath, &cfg.Host)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("read %s: %w", hostPath, err)
+	}
+	if err == nil {
+		if err := rejectUnknownKeys(hostPath, md); err != nil {
+			return nil, err
+		}
 	}
 
 	paths, err := filepath.Glob(filepath.Join(dir, "deployments", "*.toml"))
@@ -202,6 +218,21 @@ func LoadConfig(dir string) (*Config, error) {
 	return cfg, cfg.Validate()
 }
 
+// rejectUnknownKeys fails on keys the config types don't define. Without it a
+// misspelled or misplaced key, such as job_timeout inside a [[pool]], would be
+// ignored and its default used.
+func rejectUnknownKeys(path string, md toml.MetaData) error {
+	undecoded := md.Undecoded()
+	if len(undecoded) == 0 {
+		return nil
+	}
+	keys := make([]string, len(undecoded))
+	for i, k := range undecoded {
+		keys[i] = k.String()
+	}
+	return fmt.Errorf("%s: unknown keys: %s", path, strings.Join(keys, ", "))
+}
+
 // DeploymentName derives a deployment's name from its file: the file name
 // without .toml, or for <name>/config.toml, <name>.
 func DeploymentName(path string) string {
@@ -219,8 +250,12 @@ func LoadDeployment(path string) (*Deployment, error) {
 		RunnerGroup: "Default",
 		JobTimeout:  Duration{6 * time.Hour},
 	}
-	if _, err := toml.DecodeFile(path, d); err != nil {
+	md, err := toml.DecodeFile(path, d)
+	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	if err := rejectUnknownKeys(path, md); err != nil {
+		return nil, err
 	}
 	if app := d.GitHubApp; app != nil && strings.HasPrefix(app.PrivateKeyPath, "~/") {
 		home, _ := os.UserHomeDir()
@@ -331,9 +366,26 @@ func (d *Deployment) Validate() error {
 		if len(p.NetworkAllow) > 0 && !p.isolated() {
 			errs = append(errs, fmt.Errorf("pool %q: network_allow only applies to isolated pools", p.Name))
 		}
+		for _, kr := range []struct {
+			key   string
+			rules []string
+		}{{"softnet_allow", p.SoftnetAllow}, {"softnet_block", p.SoftnetBlock}} {
+			key, rules := kr.key, kr.rules
+			if len(rules) > 0 && !p.isolated() {
+				errs = append(errs, fmt.Errorf("pool %q: %s only applies to isolated pools", p.Name, key))
+			}
+			for _, rule := range rules {
+				switch {
+				case strings.TrimSpace(rule) == "":
+					errs = append(errs, fmt.Errorf("pool %q: %s has an empty rule", p.Name, key))
+				case strings.Contains(rule, ","):
+					errs = append(errs, fmt.Errorf("pool %q: %s entry %q holds a comma; give one rule per entry", p.Name, key, rule))
+				}
+			}
+		}
 		for _, a := range p.RunArgs {
 			if strings.HasPrefix(a, "--net-") {
-				errs = append(errs, fmt.Errorf("pool %q: set networking with network and network_allow, not %s in run_args", p.Name, a))
+				errs = append(errs, fmt.Errorf("pool %q: set networking with network, network_allow, softnet_allow and softnet_block, not %s in run_args", p.Name, a))
 			}
 		}
 		if p.CPU <= 0 || p.MemoryMB <= 0 || p.MaxRunners <= 0 {

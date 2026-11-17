@@ -340,6 +340,19 @@ limits to know:
   all, so they're pointed at public DNS instead (Cloudflare and Google; set
   `dns` on the pool for others). `network = "shared"` is Tart's plain NAT,
   which reaches everything the Mac can.
+- **Tighter rules:** `softnet_allow` and `softnet_block` pass Softnet rules
+  to Tart as written, one per entry, for limits by protocol or port, such as
+  web traffic and DNS only; protocol and port rules need Softnet 0.25.0 or
+  later. Private ranges stay closed only while no allow covers them: traffic
+  no rule matches reaches public addresses only, but any allow that matches a
+  private address opens it, so `out proto tcp port 443` opens port 443 on
+  your router and NAS too. Softnet ranks a rule that names a port above one
+  that doesn't, then the longest prefix, so a block such as
+  `out proto tcp 192.168.0.0/16 port 1:65535` beats that allow, while one
+  without a port doesn't. Add such a block for each private range
+  (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`,
+  `169.254.0.0/16`) beside a port allow, and give a `network_allow` host its
+  own `out proto tcp <ip>/32 port 1:65535` allow.
 - **Inside the VM:** jobs run as an admin user with passwordless sudo, like
   GitHub-hosted runners. The VM's single-use runner registration is readable
   from inside the VM; it is valid only for that one job.
