@@ -213,7 +213,7 @@ func TestPoolNetwork(t *testing.T) {
 		"network = \"bridged\"\n":                                  `network must be "isolated" or "shared"`,
 		"network_allow = [\"192.168.1.0/33\"]\n":                   "must be an IPv4 CIDR",
 		"network = \"shared\"\nnetwork_allow = [\"10.0.0.0/8\"]\n": "only applies to isolated pools",
-		"run_args = [\"--net-bridged\", \"en0\"]\n":                "not --net-bridged in run_args",
+		"run_args = [\"--net-bridged\", \"en0\"]\n":                "softnet_block, not --net-bridged in run_args",
 	} {
 		body := strings.Replace(deploymentTOML("https://github.com/acme"), "max_runners = 2\n", "max_runners = 2\n"+snippet, 1)
 		dir := writeConfigDir(t, "", map[string]string{"acme": body})
@@ -228,5 +228,63 @@ func TestDNSOnlyForIsolatedMacOS(t *testing.T) {
 	dir := writeConfigDir(t, "", map[string]string{"acme": body})
 	if _, err := LoadConfig(dir); err == nil || !strings.Contains(err.Error(), "dns only applies to isolated macOS pools") {
 		t.Fatalf("expected dns on a Linux pool to be rejected, got %v", err)
+	}
+}
+
+func TestTartRunArgsSoftnetRules(t *testing.T) {
+	p := Pool{
+		Network:      "isolated",
+		NetworkAllow: []string{"10.0.0.0/8"},
+		SoftnetAllow: []string{"out proto udp 1.1.1.1/32 port 53"},
+		SoftnetBlock: []string{"@host", "out proto icmp"},
+		RunArgs:      []string{"--no-clipboard"},
+	}
+	want := []string{
+		"--net-softnet",
+		"--net-softnet-allow=10.0.0.0/8,out proto udp 1.1.1.1/32 port 53",
+		"--net-softnet-block=@host,out proto icmp",
+		"--no-clipboard",
+	}
+	if got := p.tartRunArgs(); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("tartRunArgs = %q, want %q", got, want)
+	}
+}
+
+func TestValidateSoftnetRules(t *testing.T) {
+	for snippet, want := range map[string]string{
+		"softnet_block = [\"@host,out proto icmp\"]\n":                 "one rule per entry",
+		"softnet_allow = [\"\"]\n":                                     "empty rule",
+		"network = \"shared\"\nsoftnet_block = [\"@host\"]\n":          "only applies to isolated pools",
+		"network = \"shared\"\nsoftnet_allow = [\"out proto icmp\"]\n": "only applies to isolated pools",
+	} {
+		body := strings.Replace(deploymentTOML("https://github.com/acme"), "max_runners = 2\n", "max_runners = 2\n"+snippet, 1)
+		dir := writeConfigDir(t, "", map[string]string{"acme": body})
+		if _, err := LoadConfig(dir); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: expected %q, got %v", snippet, want, err)
+		}
+	}
+}
+
+func TestLoadDeploymentRejectsUnknownKeys(t *testing.T) {
+	for snippet, want := range map[string]string{
+		"job_timeout = \"1h\"\n": "pool.job_timeout",
+		"max_runer = 3\n":        "pool.max_runer",
+	} {
+		body := strings.Replace(deploymentTOML("https://github.com/acme"), "max_runners = 2\n", "max_runners = 2\n"+snippet, 1)
+		dir := writeConfigDir(t, "", map[string]string{"acme": body})
+		if _, err := LoadConfig(dir); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: expected %q, got %v", snippet, want, err)
+		}
+	}
+	dir := writeConfigDir(t, "", map[string]string{"acme": "regstration_url = \"x\"\n" + deploymentTOML("https://github.com/acme")})
+	if _, err := LoadConfig(dir); err == nil || !strings.Contains(err.Error(), "regstration_url") {
+		t.Errorf("misspelled top-level key: got %v", err)
+	}
+}
+
+func TestLoadConfigRejectsUnknownHostKeys(t *testing.T) {
+	dir := writeConfigDir(t, "drain_timout = \"1h\"\n", map[string]string{"acme": deploymentTOML("https://github.com/acme")})
+	if _, err := LoadConfig(dir); err == nil || !strings.Contains(err.Error(), "drain_timout") {
+		t.Fatalf("expected a misspelled host.toml key to be rejected, got %v", err)
 	}
 }
