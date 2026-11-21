@@ -170,5 +170,27 @@ func CheckSoftnet() error {
 	if !ok || st.Uid != 0 || info.Mode()&os.ModeSetuid == 0 {
 		return fmt.Errorf("softnet (%s) must be owned by root with the setuid bit for isolated networking; run: sudo chown root:wheel %s && sudo chmod u+s %s", real, real, real)
 	}
-	return nil
+	out, err := exec.Command(real, "--version").Output()
+	if err != nil {
+		return fmt.Errorf("softnet --version: %w", err)
+	}
+	return checkSoftnetVersion(string(out))
+}
+
+// checkSoftnetVersion fails unless `softnet --version` printed 0.22.0 or
+// later, the first version whose rules understand @host, which isolated
+// pools use to keep VMs off this Mac.
+func checkSoftnetVersion(out string) error {
+	fields := strings.Fields(out)
+	if len(fields) == 2 && fields[0] == "softnet" {
+		v, _, _ := strings.Cut(fields[1], "-")
+		var major, minor, patch int
+		if n, _ := fmt.Sscanf(v, "%d.%d.%d", &major, &minor, &patch); n == 3 {
+			if major > 0 || minor >= 22 {
+				return nil
+			}
+			return fmt.Errorf("softnet %s is too old for isolated networking, which needs 0.22.0 or later: brew upgrade openai/tools/softnet", v)
+		}
+	}
+	return fmt.Errorf("can't read softnet's version from %q", strings.TrimSpace(out))
 }

@@ -110,16 +110,16 @@ type Pool struct {
 	// RunnerUser is the guest user the runner runs as.
 	RunnerUser string `toml:"runner_user"`
 	// Network is "isolated" (the default) or "shared". Isolated VMs use
-	// Tart's Softnet: they can reach the internet, and not your local
-	// network, other VMs or private address ranges. Shared is Tart's plain
-	// NAT, which can reach everything this Mac can.
+	// Tart's Softnet: they can reach the internet, and not this Mac, your
+	// local network, other VMs or private address ranges. Shared is Tart's
+	// plain NAT, which can reach everything this Mac can.
 	Network string `toml:"network"`
 	// NetworkAllow lists IPv4 CIDRs an isolated VM may reach anyway, e.g.
 	// a package mirror on the LAN.
 	NetworkAllow []string `toml:"network_allow"`
-	// DNS lists the IPv4 DNS servers an isolated macOS VM uses. macOS guests
-	// on Softnet can't reach the gateway, which DHCP names as their DNS
-	// server, so they get public resolvers instead (defaultGuestDNS).
+	// DNS lists the IPv4 DNS servers an isolated VM uses. Isolated VMs can't
+	// reach this Mac, which DHCP names as their DNS server, so they get
+	// public resolvers instead (defaultGuestDNS).
 	DNS []string `toml:"dns"`
 	// RunArgs are extra arguments for `tart run`, e.g. ["--rosetta", "rosetta"].
 	RunArgs []string `toml:"run_args"`
@@ -136,7 +136,9 @@ var defaultGuestDNS = []string{"1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4"}
 func (p Pool) tartRunArgs() []string {
 	var args []string
 	if p.isolated() {
-		args = append(args, "--net-softnet")
+		// Softnet otherwise lets VMs reach their gateway, this Mac, and with
+		// it every service listening on all of its interfaces.
+		args = append(args, "--net-softnet", "--net-softnet-block=@host")
 		if len(p.NetworkAllow) > 0 {
 			args = append(args, "--net-softnet-allow="+strings.Join(p.NetworkAllow, ","))
 		}
@@ -231,7 +233,7 @@ func LoadDeployment(path string) (*Deployment, error) {
 		if p.Network == "" {
 			p.Network = "isolated"
 		}
-		if p.DNS == nil && p.isolated() && p.isMacOS() {
+		if p.DNS == nil && p.isolated() {
 			p.DNS = defaultGuestDNS
 		}
 		if p.RunnerUser == "" {
@@ -325,8 +327,11 @@ func (d *Deployment) Validate() error {
 				errs = append(errs, fmt.Errorf("pool %q: dns entry %q must be an IPv4 address", p.Name, ip))
 			}
 		}
-		if len(p.DNS) > 0 && !(p.isolated() && p.isMacOS()) {
-			errs = append(errs, fmt.Errorf("pool %q: dns only applies to isolated macOS pools", p.Name))
+		if len(p.DNS) > 0 && !p.isolated() {
+			errs = append(errs, fmt.Errorf("pool %q: dns only applies to isolated pools", p.Name))
+		}
+		if p.isolated() && p.DNS != nil && len(p.DNS) == 0 {
+			errs = append(errs, fmt.Errorf("pool %q: dns must list at least one server, since isolated VMs can't use this Mac's", p.Name))
 		}
 		if len(p.NetworkAllow) > 0 && !p.isolated() {
 			errs = append(errs, fmt.Errorf("pool %q: network_allow only applies to isolated pools", p.Name))

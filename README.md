@@ -156,9 +156,9 @@ afterwards, so workflows don't change when the Mac or the maintainer does.
    tart pull ghcr.io/cirruslabs/macos-tahoe-xcode:latest
    ```
 
-   Then let Softnet, which keeps VMs off your local network (see the
-   [security model](#security-model)), set up VM networking. It needs root
-   for that, and drops it straight after:
+   Then let Softnet, which keeps VMs off this Mac and your local network (see
+   the [security model](#security-model)), set up VM networking. It needs
+   Softnet 0.22.0 or later, and root for that, which it drops straight after:
 
    ```bash
    s=$(readlink -f "$(command -v softnet)") && sudo chown root:wheel "$s" && sudo chmod u+s "$s"
@@ -332,14 +332,15 @@ limits to know:
 - **The network:** pools default to `network = "isolated"`, Tart's Softnet:
   a VM can reach globally routable IPv4 addresses (the internet) and nothing
   in private ranges, so not your local network, NAS or other machines, and
-  not other jobs' VMs. Open specific ranges with `network_allow`. Linux VMs
-  can also reach this Mac itself, as their gateway and DNS server, so
+  not other jobs' VMs. It has no IPv6. Open specific ranges with
+  `network_allow`. It can't reach this Mac either, its gateway included, so
   services the Mac offers on all interfaces (AirPlay Receiver, Screen
-  Sharing, a dev server on `0.0.0.0`) are reachable from Linux jobs; turn off
-  the ones you don't need. macOS VMs can't reach the gateway on Softnet at
-  all, so they're pointed at public DNS instead (Cloudflare and Google; set
-  `dns` on the pool for others). `network = "shared"` is Tart's plain NAT,
-  which reaches everything the Mac can.
+  Sharing, a dev server on `0.0.0.0`) stay out of jobs' reach. That also
+  rules out the Mac as DNS server, so VMs are pointed at public DNS instead
+  (Cloudflare and Google; set `dns` on the pool for others): through
+  `networksetup` in macOS guests, and through systemd-resolved in Linux ones,
+  which a Linux image therefore needs. `network = "shared"` is Tart's plain
+  NAT, which reaches everything the Mac can.
 - **Inside the VM:** jobs run as an admin user with passwordless sudo, like
   GitHub-hosted runners. The VM's single-use runner registration is readable
   from inside the VM; it is valid only for that one job.
