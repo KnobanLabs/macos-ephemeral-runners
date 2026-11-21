@@ -136,8 +136,8 @@ afterwards, so workflows don't change when the Mac or the maintainer does.
   is comfortable. Deployments that use the same images share them.
 - **RAM:** 7 GB per macOS job and 8 GB per Ubuntu job, plus 8 GB for the host.
   24 GB is a practical minimum; see [Capacity](#capacity).
-- **Tart 2.29.0 or later.** VMs start with `--no-keyboard` and `--no-pointer`,
-  which older versions lack.
+- **Tart 2.30.0 or later.** VMs start with `--no-keyboard`, `--no-pointer`
+  and, on isolated pools, `--net-softnet-block`, which older versions lack.
 - Homebrew and Go (`brew install go`).
 - A logged-in user session. The controller is a LaunchAgent and runs only while
   its user is logged in. On a headless Mac, turn on automatic login for that
@@ -158,7 +158,7 @@ afterwards, so workflows don't change when the Mac or the maintainer does.
 
    Then let Softnet, which keeps VMs off this Mac and your local network (see
    the [security model](#security-model)), set up VM networking. It needs
-   Softnet 0.22.0 or later, and root for that, which it drops straight after:
+   Softnet 0.23.0 or later, and root for that, which it drops straight after:
 
    ```bash
    s=$(readlink -f "$(command -v softnet)") && sudo chown root:wheel "$s" && sudo chmod u+s "$s"
@@ -333,9 +333,13 @@ limits to know:
   a VM can reach globally routable IPv4 addresses (the internet) and nothing
   in private ranges, so not your local network, NAS or other machines, and
   not other jobs' VMs. It has no IPv6. Open specific ranges with
-  `network_allow`. It can't reach this Mac either, its gateway included, so
-  services the Mac offers on all interfaces (AirPlay Receiver, Screen
-  Sharing, a dev server on `0.0.0.0`) stay out of jobs' reach. That also
+  `network_allow`. It can't reach this Mac either: its gateway, the Mac's
+  side of the VM's network, is refused, and the Mac's other addresses are
+  private ones. So services the Mac offers on all interfaces (AirPlay
+  Receiver, Screen Sharing, a dev server on `0.0.0.0`) stay out of jobs'
+  reach, unless `network_allow` opens a range that holds one of the Mac's
+  own addresses, such as its LAN, or the Mac holds a public IPv4 address
+  of its own. That also
   rules out the Mac as DNS server, so VMs are pointed at public DNS instead
   (Cloudflare and Google; set `dns` on the pool for others): through
   `networksetup` in macOS guests, and through systemd-resolved in Linux ones,

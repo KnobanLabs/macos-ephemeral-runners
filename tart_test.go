@@ -34,11 +34,11 @@ func TestStartBootsWithoutGraphicsAudioOrInput(t *testing.T) {
 func TestCheckSoftnetVersion(t *testing.T) {
 	for out, want := range map[string]string{
 		"softnet 0.24.0-b869e33\n": "",
-		"softnet 0.22.0\n":         "",
+		"softnet 0.23.0\n":         "",
 		"softnet 1.0.0\n":          "",
-		"softnet 0.21.1-c709387\n": "too old",
+		"softnet 0.22.9-0000000\n": "too old",
+		"softnet unknown-unknown":  "can't read",
 		"softnet\n":                "can't read",
-		"Usage: softnet\n":         "can't read",
 	} {
 		err := checkSoftnetVersion(out)
 		if want == "" && err != nil || want != "" && (err == nil || !strings.Contains(err.Error(), want)) {

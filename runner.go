@@ -104,8 +104,10 @@ done
 `
 
 // guestSetDNSLinux does the same in a Linux guest, through systemd-resolved.
-// The routing domain "~." sends every lookup to these servers alone, so the
-// gateway DHCP names, even after a lease renewal, is never asked.
+// The routing domain "~." sends every lookup through resolved's stub to these
+// servers alone, even after a lease renewal names the gateway again. Programs
+// that read /run/systemd/resolve/resolv.conf, as Docker does, get these
+// servers listed first.
 const guestSetDNSLinux = `set -eu
 d=/etc/systemd/resolved.conf.d
 /usr/bin/sudo -n mkdir -p "$d"
