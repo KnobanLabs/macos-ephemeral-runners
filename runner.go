@@ -94,14 +94,34 @@ fi
 GCM_INTERACTIVE=never GIT_TERMINAL_PROMPT=0 ACTIONS_RUNNER_INPUT_JITCONFIG="$JIT" exec ./run.sh < /dev/null
 `
 
-// guestSetDNS points every network service in a macOS guest at the DNS
-// servers given as its arguments. On Softnet, the gateway DHCP names as the
-// DNS server doesn't answer macOS guests, so without this nothing resolves.
-const guestSetDNS = `set -eu
+// guestSetDNSMacOS points every network service in a macOS guest at the DNS
+// servers given as its arguments. On Softnet, isolated VMs can't reach the
+// gateway DHCP names as their DNS server, so without this nothing resolves.
+const guestSetDNSMacOS = `set -eu
 /usr/sbin/networksetup -listallnetworkservices | tail -n +2 | sed "s/^\*//" | while IFS= read -r s; do
   /usr/bin/sudo -n /usr/sbin/networksetup -setdnsservers "$s" "$@"
 done
 `
+
+// guestSetDNSLinux does the same in a Linux guest, through systemd-resolved.
+// The routing domain "~." sends every lookup through resolved's stub to these
+// servers alone, even after a lease renewal names the gateway again. Programs
+// that read /run/systemd/resolve/resolv.conf, as Docker does, get these
+// servers listed first.
+const guestSetDNSLinux = `set -eu
+d=/etc/systemd/resolved.conf.d
+/usr/bin/sudo -n mkdir -p "$d"
+printf '[Resolve]\nDNS=%s\nDomains=~.\n' "$*" | /usr/bin/sudo -n tee "$d/ephemeral-runners-dns.conf" >/dev/null
+/usr/bin/sudo -n systemctl restart systemd-resolved
+`
+
+// guestSetDNS is the script that points the pool's guests at its DNS servers.
+func (p Pool) guestSetDNS() string {
+	if p.isMacOS() {
+		return guestSetDNSMacOS
+	}
+	return guestSetDNSLinux
+}
 
 // runVM takes a runner from capacity to teardown. It never returns until the
 // VM is deleted and its registration is gone.
@@ -181,7 +201,7 @@ func (c *poolController) serve(ctx context.Context, log *slog.Logger, r *runner)
 	}
 	log.Info("VM booted", slog.Duration("took", time.Since(start).Round(time.Second)))
 	if len(c.pool.DNS) > 0 {
-		if _, err := c.tart.Exec(ctx, r.name, nil, append([]string{"/bin/sh", "-c", guestSetDNS, "eph"}, c.pool.DNS...)...); err != nil {
+		if _, err := c.tart.Exec(ctx, r.name, nil, append([]string{"/bin/sh", "-c", c.pool.guestSetDNS(), "eph"}, c.pool.DNS...)...); err != nil {
 			return fmt.Errorf("set guest DNS: %w", err)
 		}
 	}

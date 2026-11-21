@@ -190,19 +190,21 @@ func TestPoolNetwork(t *testing.T) {
 	if p.Network != "isolated" || !cfg.usesIsolatedNetwork() {
 		t.Fatalf("pools should default to isolated networking, got %q", p.Network)
 	}
-	if got := strings.Join(p.tartRunArgs(), " "); got != "--net-softnet" {
+	if got := strings.Join(p.tartRunArgs(), " "); got != "--net-softnet --net-softnet-block=@host" {
 		t.Fatalf("tartRunArgs = %q", got)
+	}
+	if got := strings.Join(cfg.Deployments[0].Pools[1].tartRunArgs(), " "); got != "--net-softnet --net-softnet-block=@host" {
+		t.Fatalf("isolated Linux pool tartRunArgs = %q", got)
 	}
 	p.NetworkAllow = []string{"192.168.1.50/32"}
 	p.RunArgs = []string{"--rosetta", "rosetta"}
-	if got := strings.Join(p.tartRunArgs(), " "); got != "--net-softnet --net-softnet-allow=192.168.1.50/32 --rosetta rosetta" {
+	if got := strings.Join(p.tartRunArgs(), " "); got != "--net-softnet --net-softnet-block=@host --net-softnet-allow=192.168.1.50/32 --rosetta rosetta" {
 		t.Fatalf("tartRunArgs = %q", got)
 	}
-	if got := strings.Join(cfg.Deployments[0].Pools[0].DNS, ","); got != "1.1.1.1,1.0.0.1,8.8.8.8,8.8.4.4" {
-		t.Fatalf("isolated macOS pool DNS = %q", got)
-	}
-	if dns := cfg.Deployments[0].Pools[1].DNS; dns != nil {
-		t.Fatalf("Linux pool should get no DNS override, got %v", dns)
+	for _, p := range cfg.Deployments[0].Pools {
+		if got := strings.Join(p.DNS, ","); got != "1.1.1.1,1.0.0.1,8.8.8.8,8.8.4.4" {
+			t.Fatalf("isolated %s pool DNS = %q", p.OS, got)
+		}
 	}
 	p = Pool{Network: "shared", RunArgs: []string{"--rosetta", "rosetta"}}
 	if got := strings.Join(p.tartRunArgs(), " "); got != "--rosetta rosetta" {
@@ -223,10 +225,43 @@ func TestPoolNetwork(t *testing.T) {
 	}
 }
 
-func TestDNSOnlyForIsolatedMacOS(t *testing.T) {
-	body := strings.Replace(deploymentTOML("https://github.com/acme"), `os = "linux"`, "os = \"linux\"\ndns = [\"1.1.1.1\"]", 1)
-	dir := writeConfigDir(t, "", map[string]string{"acme": body})
-	if _, err := LoadConfig(dir); err == nil || !strings.Contains(err.Error(), "dns only applies to isolated macOS pools") {
-		t.Fatalf("expected dns on a Linux pool to be rejected, got %v", err)
+func TestPoolDNS(t *testing.T) {
+	body := strings.Replace(deploymentTOML("https://github.com/acme"), `os = "linux"`, "os = \"linux\"\ndns = [\"9.9.9.9\"]", 1)
+	cfg, err := LoadConfig(writeConfigDir(t, "", map[string]string{"acme": body}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(cfg.Deployments[0].Pools[1].DNS, ","); got != "9.9.9.9" {
+		t.Fatalf("isolated Linux pool DNS = %q", got)
+	}
+
+	for snippet, want := range map[string]string{
+		"network = \"shared\"\ndns = [\"1.1.1.1\"]\n": "dns only applies to isolated pools",
+		"dns = []\n":        "dns must list at least one server",
+		"dns = [\"::1\"]\n": "must be an IPv4 address",
+	} {
+		body := strings.Replace(deploymentTOML("https://github.com/acme"), "max_runners = 8\n", "max_runners = 8\n"+snippet, 1)
+		if _, err := LoadConfig(writeConfigDir(t, "", map[string]string{"acme": body})); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: expected %q, got %v", snippet, want, err)
+		}
+	}
+	cfg, err = LoadConfig(writeConfigDir(t, "", map[string]string{"acme": strings.Replace(deploymentTOML("https://github.com/acme"), "max_runners = 8\n", "max_runners = 8\nnetwork = \"shared\"\n", 1)}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dns := cfg.Deployments[0].Pools[1].DNS; dns != nil {
+		t.Fatalf("a shared pool should get no DNS override, got %v", dns)
+	}
+}
+
+func TestGuestSetDNSPerOS(t *testing.T) {
+	if s := (Pool{OS: "macos"}).guestSetDNS(); !strings.Contains(s, "networksetup -setdnsservers") {
+		t.Errorf("macOS guests should set DNS with networksetup, got %q", s)
+	}
+	s := (Pool{OS: "linux"}).guestSetDNS()
+	for _, want := range []string{"/etc/systemd/resolved.conf.d", "Domains=~.", "systemctl restart systemd-resolved"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("Linux guest DNS script lacks %q: %q", want, s)
+		}
 	}
 }
