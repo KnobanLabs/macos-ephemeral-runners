@@ -174,7 +174,7 @@ func CheckSoftnet() error {
 	// too old.
 	out, err := exec.Command(real, "--version").Output()
 	if err != nil {
-		return fmt.Errorf("softnet (%s) is too old for isolated networking, which needs %s: brew upgrade openai/tools/softnet", real, minSoftnet)
+		return fmt.Errorf("softnet --version failed (%w), so softnet (%s) is likely too old for isolated networking, which needs %s: brew upgrade openai/tools/softnet", err, real, minSoftnet)
 	}
 	return checkSoftnetVersion(string(out))
 }
