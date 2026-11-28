@@ -161,8 +161,8 @@ func (c *poolController) serve(ctx context.Context, log *slog.Logger, r *runner)
 	defer c.host.Release(lease)
 
 	// The check at startup isn't enough: a Softnet upgraded while the
-	// controller runs has lost its setuid bit, and every VM would fail
-	// without saying why. After Acquire, which can wait for hours.
+	// controller runs has lost its setuid bit, and every VM would boot only
+	// to fail. It comes after Acquire, which can wait for hours.
 	if c.pool.isolated() {
 		if err := CheckSoftnet(); err != nil {
 			return err

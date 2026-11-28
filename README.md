@@ -169,9 +169,9 @@ afterwards, so workflows don't change when the Mac or the maintainer does.
    setuid bit. The pin keeps `brew upgrade` from installing one, so the
    setup above survives your routine upgrades. Upgrade Softnet on purpose
    instead, as [Operating](#operating) shows. Until a new Softnet gets root,
-   `ephemeral-runners check` (and so `install.sh`) fails with the command
-   above. The controller won't start, and a controller that is already
-   running starts no isolated VMs.
+   `ephemeral-runners check` (and so `install.sh`) fails with the `sudo`
+   commands above. The controller won't start, and a controller that is
+   already running starts no isolated VMs.
 
 2. **Get the repo.**
 
