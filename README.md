@@ -162,11 +162,16 @@ afterwards, so workflows don't change when the Mac or the maintainer does.
 
    ```bash
    s=$(readlink -f "$(command -v softnet)") && sudo chown root:wheel "$s" && sudo chmod u+s "$s"
+   brew pin openai/tools/softnet
    ```
 
-   Repeat this after `brew upgrade` installs a new Softnet. Until you do,
-   `ephemeral-runners check` (and so `install.sh`) fails with this command,
-   and the controller won't start isolated pools.
+   A Softnet that Homebrew installs is a new binary, without root or the
+   setuid bit. The pin keeps `brew upgrade` from installing one, so the
+   setup above survives your routine upgrades. Upgrade Softnet on purpose
+   instead, as [Operating](#operating) shows. Until a new Softnet gets root,
+   `ephemeral-runners check` (and so `install.sh`) fails with the command
+   above. The controller won't start, and a controller that is already
+   running starts no isolated VMs.
 
 2. **Get the repo.**
 
@@ -403,6 +408,16 @@ take effect on the next restart.
 
 **Updating images:** `tart pull <image>` again. New jobs use the new image
 right away. Prune old layers with `tart prune --entries caches --older-than 14`.
+
+**Upgrading Softnet:** it's pinned (setup step 1), so `brew upgrade` skips it.
+A `tart` upgrade that needs a newer Softnet stops with "You must `brew unpin
+openai/tools/softnet`". Either way, upgrade it with:
+
+```bash
+brew unpin openai/tools/softnet && brew upgrade openai/tools/softnet &&
+  s=$(readlink -f "$(command -v softnet)") && sudo chown root:wheel "$s" && sudo chmod u+s "$s" &&
+  brew pin openai/tools/softnet
+```
 
 **Stopping gracefully:** with `drain_timeout = "0s"` (the default), stopping
 the controller destroys running jobs' VMs at once. Raise it in `host.toml` to

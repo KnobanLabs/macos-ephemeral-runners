@@ -154,6 +154,14 @@ func (c *poolController) runVM(ctx context.Context, r *runner) {
 }
 
 func (c *poolController) serve(ctx context.Context, log *slog.Logger, r *runner) error {
+	// The check at startup isn't enough: a Softnet upgraded while the
+	// controller runs has lost its setuid bit, and every VM would fail
+	// without saying why.
+	if c.pool.isolated() {
+		if err := CheckSoftnet(); err != nil {
+			return err
+		}
+	}
 	lease, err := c.host.Acquire(ctx, c.pool.MemoryMB, c.pool.CPU, c.pool.isMacOS())
 	if err != nil {
 		return err
