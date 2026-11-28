@@ -174,7 +174,7 @@ func CheckSoftnet() error {
 	// too old.
 	out, err := exec.Command(real, "--version").Output()
 	if err != nil {
-		return fmt.Errorf("softnet --version failed (%w), so softnet (%s) is likely too old for isolated networking, which needs %s: brew upgrade openai/tools/softnet", err, real, minSoftnet)
+		return fmt.Errorf("softnet --version failed (%w), so softnet (%s) is likely too old for isolated networking, which needs %s: upgrade it as \"Upgrading Softnet\" in README.md says (unpin, upgrade, set root and the setuid bit, pin)", err, real, minSoftnet)
 	}
 	return checkSoftnetVersion(string(out))
 }
@@ -193,7 +193,7 @@ func checkSoftnetVersion(out string) error {
 			if major > 0 || minor >= 23 {
 				return nil
 			}
-			return fmt.Errorf("softnet %s is too old for isolated networking, which needs %s: brew upgrade openai/tools/softnet", v, minSoftnet)
+			return fmt.Errorf("softnet %s is too old for isolated networking, which needs %s: upgrade it as \"Upgrading Softnet\" in README.md says (unpin, upgrade, set root and the setuid bit, pin)", v, minSoftnet)
 		}
 	}
 	return fmt.Errorf("can't read softnet's version from %q; isolated networking needs Homebrew's Softnet, %s", strings.TrimSpace(out), minSoftnet)
