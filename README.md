@@ -410,14 +410,18 @@ take effect on the next restart.
 right away. Prune old layers with `tart prune --entries caches --older-than 14`.
 
 **Upgrading Softnet:** it's pinned (setup step 1), so `brew upgrade` skips it.
-A `tart` upgrade that needs a newer Softnet stops with "You must `brew unpin
-openai/tools/softnet`". Either way, upgrade it with:
+While a newer Softnet is out, installing or upgrading `tart` stops with "You
+must `brew unpin openai/tools/softnet`". Either way, upgrade Softnet with the
+command below, then upgrade `tart` again if that was what stopped:
 
 ```bash
-brew unpin openai/tools/softnet && brew upgrade openai/tools/softnet &&
-  s=$(readlink -f "$(command -v softnet)") && sudo chown root:wheel "$s" && sudo chmod u+s "$s" &&
+brew unpin openai/tools/softnet && brew upgrade openai/tools/softnet;
+  s=$(readlink -f "$(command -v softnet)") && sudo chown root:wheel "$s" && sudo chmod u+s "$s";
   brew pin openai/tools/softnet
 ```
+
+It pins Softnet again even if a step fails. Run it again until every step
+succeeds: a step that has nothing to do only warns.
 
 **Stopping gracefully:** with `drain_timeout = "0s"` (the default), stopping
 the controller destroys running jobs' VMs at once. Raise it in `host.toml` to
